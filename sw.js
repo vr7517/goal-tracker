@@ -1,6 +1,6 @@
 // Simple offline cache for Cadence.
 // Bump CACHE_VERSION whenever you change index.html to force an update.
-const CACHE_VERSION = "cadence-v1";
+const CACHE_VERSION = "cadence-v2";
 const CORE = [
   "./",
   "./index.html",
