@@ -1,0 +1,16 @@
+{
+  "name": "Cadence · Goal Tracker",
+  "short_name": "Cadence",
+  "description": "Set goals, log your hours, and track daily progress.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ECF0EE",
+  "theme_color": "#0D8A80",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
