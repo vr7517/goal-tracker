@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadence · Goal & Hours Tracker</title>
+  <meta name="description" content="Set goals, log your hours, and track daily progress." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.4/babel.min.js"></script>
+  <style>
+    * { font-family: Inter, system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: #ECF0EE; }
+    input:focus { border-color: #0D8A80 !important; box-shadow: 0 0 0 3px #D8ECE9; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+/* ---------- theme ---------- */
+const T = {
+  ink: "#14202B", sub: "#5B6B73", paper: "#ECF0EE", surface: "#FFFFFF",
+  line: "#DCE3E0", teal: "#0D8A80", tealDark: "#0B6B63", tealSoft: "#D8ECE9",
+  amber: "#C77D2E", rose: "#B23A48",
+};
+const GOAL_TYPES = ["Learning","Career","Fitness","Project","Creative","Finance","Personal","Other"];
+const TYPE_COLOR = {
+  Learning:"#0D8A80", Career:"#3D6BB3", Fitness:"#C77D2E", Project:"#7A5AA8",
+  Creative:"#B23A48", Finance:"#4C8C4A", Personal:"#B0863C", Other:"#5B6B73",
+};
+
+/* ---------- inline svg icons ---------- */
+function Icon({ name, size = 16, color = "currentColor", style }) {
+  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none",
+    stroke: color, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style };
+  const p = {
+    target: <React.Fragment><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></React.Fragment>,
+    plus: <React.Fragment><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></React.Fragment>,
+    clock: <React.Fragment><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></React.Fragment>,
+    calendar: <React.Fragment><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></React.Fragment>,
+    x: <React.Fragment><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></React.Fragment>,
+    trash: <React.Fragment><polyline points="3 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></React.Fragment>,
+    check: <polyline points="20 6 9 17 4 12"/>,
+    flame: <path d="M12 2s5 4 5 9a5 5 0 0 1-10 0c0-1.6.6-2.7 1.2-3.6C8.5 10 12 8.2 12 2z"/>,
+    trend: <React.Fragment><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></React.Fragment>,
+    chevronLeft: <polyline points="15 18 9 12 15 6"/>,
+    timer: <React.Fragment><circle cx="12" cy="13" r="8"/><line x1="12" y1="13" x2="12" y2="9"/><line x1="9" y1="2" x2="15" y2="2"/></React.Fragment>,
+  };
+  return <svg {...common}>{p[name]}</svg>;
+}
+
+/* ---------- date helpers ---------- */
+const dayMs = 86400000;
+const iso = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`; };
+const today = () => iso(new Date());
+const parseISO = (s) => { const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d); };
+const daysBetween = (a,b) => Math.round((parseISO(b)-parseISO(a))/dayMs);
+const prettyDate = (s) => parseISO(s).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+
+/* ---------- storage (localStorage) ---------- */
+const STORE_KEY = "cadence:data:v1";
+function loadData(){ try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : { goals: [] }; } catch(e){ return { goals: [] }; } }
+function saveData(d){ try { localStorage.setItem(STORE_KEY, JSON.stringify(d)); } catch(e){ console.error(e); } }
+const uid = () => Math.random().toString(36).slice(2,10);
+
+/* ---------- goal math ---------- */
+function goalStats(goal){
+  const logs = goal.logs || [];
+  const totalHours = logs.reduce((s,l)=>s+l.hours,0);
+  const t = today();
+  const todayHours = logs.filter(l=>l.date===t).reduce((s,l)=>s+l.hours,0);
+  const daysLeft = daysBetween(t, goal.targetDate);
+  const overdue = daysLeft < 0;
+  let pct=null, remainingHours=null, requiredPace=null;
+  if (goal.estimatedHours && goal.estimatedHours>0){
+    pct = Math.min(100,(totalHours/goal.estimatedHours)*100);
+    remainingHours = Math.max(0, goal.estimatedHours-totalHours);
+    const dl = Math.max(1, daysLeft);
+    requiredPace = daysLeft<=0 ? remainingHours : remainingHours/dl;
+  }
+  const bar = goal.dailyTarget && goal.dailyTarget>0 ? goal.dailyTarget : 0.01;
+  const byDay = {}; logs.forEach(l=>{ byDay[l.date]=(byDay[l.date]||0)+l.hours; });
+  let streak=0;
+  for (let i=0;i<400;i++){ const d=iso(new Date(Date.now()-i*dayMs)); if ((byDay[d]||0)>=bar) streak++; else break; }
+  return { totalHours, todayHours, daysLeft, overdue, pct, remainingHours, requiredPace, streak };
+}
+
+/* ---------- small ui ---------- */
+function Badge({ children, color }){
+  return <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+    style={{ background: color+"22", color }}>{children}</span>;
+}
+function Field({ label, hint, children }){
+  return <label className="block mb-4">
+    <div className="flex items-baseline justify-between mb-1">
+      <span className="text-sm font-medium" style={{ color: T.ink }}>{label}</span>
+      {hint && <span className="text-xs" style={{ color: T.sub }}>{hint}</span>}
+    </div>{children}
+  </label>;
+}
+const inputStyle = { width:"100%", padding:"9px 12px", borderRadius:10, border:`1px solid ${T.line}`, background:"#fff", color:T.ink, fontSize:14, outline:"none" };
+
+/* ---------- svg bar chart ---------- */
+function BarChartSVG({ data, target }){
+  const W=560,H=170,padL=26,padR=10,padT=10,padB=26;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const max=Math.max(target||0, ...data.map(d=>d.hours), 1);
+  const niceMax=Math.ceil(max*1.15*4)/4 || 1;
+  const bw=iw/data.length;
+  const yFor=(v)=>padT+ih-(v/niceMax)*ih;
+  const ticks=[0, niceMax/2, niceMax];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display:"block" }}>
+      {ticks.map((tk,i)=>(
+        <g key={i}>
+          <line x1={padL} y1={yFor(tk)} x2={W-padR} y2={yFor(tk)} stroke={T.line} strokeWidth="1"/>
+          <text x={padL-6} y={yFor(tk)+3} textAnchor="end" fontSize="9" fill={T.sub}>{(+tk.toFixed(2))}</text>
+        </g>
+      ))}
+      {target ? (
+        <g>
+          <line x1={padL} y1={yFor(target)} x2={W-padR} y2={yFor(target)} stroke={T.amber} strokeWidth="1.5" strokeDasharray="4 4"/>
+          <text x={W-padR} y={yFor(target)-4} textAnchor="end" fontSize="9" fill={T.amber}>goal {target}h</text>
+        </g>
+      ) : null}
+      {data.map((d,i)=>{
+        const x=padL+i*bw, bh=(d.hours/niceMax)*ih, gap=bw*0.22;
+        return (
+          <g key={i}>
+            {d.hours>0 && <rect x={x+gap} y={yFor(d.hours)} width={bw-gap*2} height={Math.max(0,bh)} rx="3"
+              fill={d.isToday?T.tealDark:T.teal}><title>{d.day}: {d.hours}h</title></rect>}
+            {i%2===0 && <text x={x+bw/2} y={H-8} textAnchor="middle" fontSize="8.5" fill={T.sub}>{d.day}</text>}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ---------- new goal modal ---------- */
+function NewGoalModal({ onClose, onCreate }){
+  const [title,setTitle]=useState("");
+  const [type,setType]=useState("Learning");
+  const [targetDate,setTargetDate]=useState(iso(new Date(Date.now()+30*dayMs)));
+  const [dailyTarget,setDailyTarget]=useState("");
+  const [estimatedHours,setEstimatedHours]=useState("");
+  const [err,setErr]=useState("");
+  const submit=()=>{
+    if(!title.trim()) return setErr("Give your goal a name.");
+    if(!targetDate) return setErr("Pick a target date.");
+    onCreate({ id:uid(), title:title.trim(), type, targetDate,
+      dailyTarget: dailyTarget?Number(dailyTarget):null,
+      estimatedHours: estimatedHours?Number(estimatedHours):null,
+      createdAt: today(), logs: [] });
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background:"rgba(20,32,43,0.45)" }} onClick={onClose}>
+      <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl p-6"
+        style={{ background:T.surface, maxHeight:"92vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-semibold" style={{ color:T.ink, fontFamily:"Fraunces, Georgia, serif" }}>New goal</h2>
+          <button onClick={onClose} className="rounded-full p-1" style={{ color:T.sub }}><Icon name="x" size={20}/></button>
+        </div>
+        <Field label="What are you working toward?">
+          <input style={inputStyle} value={title} autoFocus onChange={e=>setTitle(e.target.value)} placeholder="e.g. Learn Spanish B1"/>
+        </Field>
+        <Field label="Type">
+          <div className="flex flex-wrap gap-2">
+            {GOAL_TYPES.map(t=>(
+              <button key={t} onClick={()=>setType(t)} className="rounded-full px-3 py-1.5 text-sm font-medium transition"
+                style={{ background:type===t?TYPE_COLOR[t]:"#fff", color:type===t?"#fff":T.sub, border:`1px solid ${type===t?TYPE_COLOR[t]:T.line}` }}>{t}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Target completion date">
+          <input type="date" style={inputStyle} value={targetDate} onChange={e=>setTargetDate(e.target.value)}/>
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Daily hours goal" hint="optional">
+            <input type="number" min="0" step="0.25" style={inputStyle} value={dailyTarget} onChange={e=>setDailyTarget(e.target.value)} placeholder="e.g. 1.5"/>
+          </Field>
+          <Field label="Total hours estimate" hint="optional">
+            <input type="number" min="0" step="1" style={inputStyle} value={estimatedHours} onChange={e=>setEstimatedHours(e.target.value)} placeholder="e.g. 120"/>
+          </Field>
+        </div>
+        <p className="text-xs mb-4" style={{ color:T.sub }}>A total estimate unlocks a completion bar and a suggested daily pace.</p>
+        {err && <p className="text-sm mb-3" style={{ color:T.rose }}>{err}</p>}
+        <button onClick={submit} className="w-full rounded-xl py-3 font-medium text-white transition" style={{ background:T.teal }}>Create goal</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- goal card ---------- */
+function GoalCard({ goal, active, onSelect }){
+  const s=goalStats(goal);
+  return (
+    <button onClick={onSelect} className="w-full text-left rounded-2xl p-4 mb-3 transition"
+      style={{ background:T.surface, border:`1px solid ${active?T.teal:T.line}`, boxShadow:active?`0 0 0 3px ${T.tealSoft}`:"none" }}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <span className="font-medium leading-snug" style={{ color:T.ink }}>{goal.title}</span>
+        <Badge color={TYPE_COLOR[goal.type]}>{goal.type}</Badge>
+      </div>
+      {s.pct!==null && (
+        <div className="mb-2">
+          <div className="h-2 w-full rounded-full overflow-hidden" style={{ background:T.tealSoft }}>
+            <div className="h-full rounded-full transition-all" style={{ width:`${s.pct}%`, background:T.teal }}/>
+          </div>
+          <div className="text-xs mt-1" style={{ color:T.sub }}>{Math.round(s.pct)}% · {s.totalHours}h of {goal.estimatedHours}h</div>
+        </div>
+      )}
+      <div className="flex items-center gap-3 text-xs" style={{ color:T.sub }}>
+        <span className="inline-flex items-center gap-1"><Icon name="clock" size={13}/> {s.totalHours}h logged</span>
+        <span className="inline-flex items-center gap-1" style={{ color:s.overdue?T.rose:T.sub }}>
+          <Icon name="calendar" size={13}/>{s.overdue?`${Math.abs(s.daysLeft)}d overdue`:`${s.daysLeft}d left`}</span>
+        {goal.dailyTarget && s.streak>0 && (
+          <span className="inline-flex items-center gap-1" style={{ color:T.amber }}><Icon name="flame" size={13}/> {s.streak}</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+/* ---------- stat pill ---------- */
+function Stat({ icon, label, value, tone }){
+  return (
+    <div className="rounded-2xl p-4" style={{ background:T.surface, border:`1px solid ${T.line}` }}>
+      <div className="flex items-center gap-1.5 mb-1 text-xs" style={{ color:T.sub }}><Icon name={icon} size={13}/>{label}</div>
+      <div className="text-2xl font-semibold" style={{ color:tone||T.ink, fontFamily:"Fraunces, Georgia, serif" }}>{value}</div>
+    </div>
+  );
+}
+
+/* ---------- goal detail ---------- */
+function GoalDetail({ goal, onBack, onUpdate, onDelete }){
+  const [hours,setHours]=useState("");
+  const [logDate,setLogDate]=useState(today());
+  const [note,setNote]=useState("");
+  const s=useMemo(()=>goalStats(goal),[goal]);
+  const addLog=()=>{ const h=Number(hours); if(!h||h<=0) return;
+    onUpdate({ ...goal, logs:[{ id:uid(), date:logDate, hours:h, note:note.trim() }, ...(goal.logs||[])] });
+    setHours(""); setNote(""); };
+  const removeLog=(id)=>onUpdate({ ...goal, logs:goal.logs.filter(l=>l.id!==id) });
+  const chartData=useMemo(()=>{
+    const byDay={}; (goal.logs||[]).forEach(l=>{ byDay[l.date]=(byDay[l.date]||0)+l.hours; });
+    const arr=[];
+    for(let i=13;i>=0;i--){ const d=iso(new Date(Date.now()-i*dayMs));
+      arr.push({ day:parseISO(d).toLocaleDateString(undefined,{day:"numeric",month:"short"}), hours:+(byDay[d]||0).toFixed(2), isToday:d===today() }); }
+    return arr;
+  },[goal.logs]);
+  const dailyDone=goal.dailyTarget?s.todayHours>=goal.dailyTarget:s.todayHours>0;
+  return (
+    <div>
+      <button onClick={onBack} className="lg:hidden inline-flex items-center gap-1 mb-3 text-sm" style={{ color:T.sub }}>
+        <Icon name="chevronLeft" size={16}/> All goals</button>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1"><Badge color={TYPE_COLOR[goal.type]}>{goal.type}</Badge></div>
+          <h1 className="text-2xl font-semibold leading-tight" style={{ color:T.ink, fontFamily:"Fraunces, Georgia, serif" }}>{goal.title}</h1>
+          <p className="text-sm mt-1" style={{ color:T.sub }}>Target: {prettyDate(goal.targetDate)}</p>
+        </div>
+        <button onClick={()=>onDelete(goal.id)} className="rounded-lg p-2" style={{ color:T.sub }} title="Delete goal"><Icon name="trash" size={18}/></button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <Stat icon="clock" label="Total logged" value={`${s.totalHours}h`}/>
+        <Stat icon="calendar" label={s.overdue?"Overdue":"Days left"} value={s.overdue?`${Math.abs(s.daysLeft)}d`:`${s.daysLeft}d`} tone={s.overdue?T.rose:T.ink}/>
+        {goal.dailyTarget
+          ? <Stat icon="flame" label="Streak" value={`${s.streak}d`} tone={T.amber}/>
+          : <Stat icon="trend" label="Days active" value={new Set((goal.logs||[]).map(l=>l.date)).size}/>}
+        {s.pct!==null
+          ? <Stat icon="target" label="Complete" value={`${Math.round(s.pct)}%`} tone={T.teal}/>
+          : <Stat icon="timer" label="Today" value={`${s.todayHours}h`} tone={dailyDone?T.teal:T.ink}/>}
+      </div>
+      {s.pct!==null && (
+        <div className="rounded-2xl p-4 mb-5" style={{ background:T.surface, border:`1px solid ${T.line}` }}>
+          <div className="flex justify-between text-sm mb-2" style={{ color:T.sub }}>
+            <span>{s.totalHours}h of {goal.estimatedHours}h</span><span>{s.remainingHours}h to go</span></div>
+          <div className="h-3 w-full rounded-full overflow-hidden" style={{ background:T.tealSoft }}>
+            <div className="h-full rounded-full transition-all" style={{ width:`${s.pct}%`, background:T.teal }}/></div>
+          {s.remainingHours>0 && (
+            <p className="text-sm mt-2" style={{ color:T.sub }}>Suggested pace:{" "}
+              <span style={{ color:s.overdue?T.rose:T.ink, fontWeight:600 }}>{s.requiredPace.toFixed(2)}h / day</span>{" "}
+              {s.overdue?"to finish now (past target)":`for the next ${Math.max(1,s.daysLeft)} days`}
+              {goal.dailyTarget && !s.overdue && s.requiredPace>goal.dailyTarget && (
+                <span style={{ color:T.amber }}> · above your {goal.dailyTarget}h/day goal</span>)}
+            </p>)}
+        </div>
+      )}
+      {goal.dailyTarget && (
+        <div className="rounded-2xl p-4 mb-5 flex items-center justify-between"
+          style={{ background:dailyDone?T.tealSoft:T.surface, border:`1px solid ${dailyDone?T.teal:T.line}` }}>
+          <div>
+            <div className="text-sm font-medium" style={{ color:T.ink }}>{dailyDone?"Daily goal met":"Today's progress"}</div>
+            <div className="text-sm" style={{ color:T.sub }}>{s.todayHours}h of {goal.dailyTarget}h goal</div>
+          </div>
+          <div className="flex items-center gap-2">
+            {dailyDone && <Icon name="check" size={18} color={T.teal}/>}
+            <div className="w-28 h-2 rounded-full overflow-hidden" style={{ background:"#fff" }}>
+              <div className="h-full rounded-full" style={{ width:`${Math.min(100,(s.todayHours/goal.dailyTarget)*100)}%`, background:T.teal }}/></div>
+          </div>
+        </div>
+      )}
+      <div className="rounded-2xl p-4 mb-5" style={{ background:T.surface, border:`1px solid ${T.line}` }}>
+        <div className="text-sm font-medium mb-3" style={{ color:T.ink }}>Log time</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+          <label className="block"><span className="text-xs" style={{ color:T.sub }}>Hours</span>
+            <input type="number" min="0" step="0.25" value={hours} onChange={e=>setHours(e.target.value)} placeholder="0" style={inputStyle}/></label>
+          <label className="block"><span className="text-xs" style={{ color:T.sub }}>Date</span>
+            <input type="date" value={logDate} max={today()} onChange={e=>setLogDate(e.target.value)} style={inputStyle}/></label>
+          <label className="block col-span-2 sm:col-span-1"><span className="text-xs" style={{ color:T.sub }}>Note</span>
+            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="optional" style={inputStyle}/></label>
+          <button onClick={addLog} className="rounded-xl py-2.5 font-medium text-white inline-flex items-center justify-center gap-1" style={{ background:T.teal }}>
+            <Icon name="plus" size={16}/> Add</button>
+        </div>
+      </div>
+      <div className="rounded-2xl p-4 mb-5" style={{ background:T.surface, border:`1px solid ${T.line}` }}>
+        <div className="text-sm font-medium mb-3" style={{ color:T.ink }}>Last 14 days</div>
+        <BarChartSVG data={chartData} target={goal.dailyTarget}/>
+      </div>
+      <div className="rounded-2xl p-4" style={{ background:T.surface, border:`1px solid ${T.line}` }}>
+        <div className="text-sm font-medium mb-3" style={{ color:T.ink }}>History</div>
+        {(goal.logs||[]).length===0
+          ? <p className="text-sm py-4 text-center" style={{ color:T.sub }}>No hours logged yet. Add your first session above.</p>
+          : <div className="divide-y" style={{ borderColor:T.line }}>
+              {goal.logs.map(l=>(
+                <div key={l.id} className="flex items-center justify-between py-2.5">
+                  <div>
+                    <span className="font-medium" style={{ color:T.ink }}>{l.hours}h</span>
+                    <span className="text-sm ml-2" style={{ color:T.sub }}>{prettyDate(l.date)}</span>
+                    {l.note && <span className="text-sm ml-2" style={{ color:T.sub }}>· {l.note}</span>}
+                  </div>
+                  <button onClick={()=>removeLog(l.id)} className="p-1" style={{ color:T.sub }}><Icon name="trash" size={15}/></button>
+                </div>
+              ))}
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- app ---------- */
+function App(){
+  const [data,setData]=useState(()=>loadData());
+  const [selectedId,setSelectedId]=useState(null);
+  const [showNew,setShowNew]=useState(false);
+  const persist=(next)=>{ setData(next); saveData(next); };
+  const createGoal=(g)=>{ persist({ goals:[g,...data.goals] }); setSelectedId(g.id); setShowNew(false); };
+  const updateGoal=(g)=>persist({ goals:data.goals.map(x=>x.id===g.id?g:x) });
+  const deleteGoal=(id)=>{ persist({ goals:data.goals.filter(x=>x.id!==id) }); setSelectedId(null); };
+  const selected=data.goals.find(g=>g.id===selectedId);
+  return (
+    <div style={{ background:T.paper, minHeight:"100vh", color:T.ink }}>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <header className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl p-2" style={{ background:T.teal }}><Icon name="target" size={20} color="#fff"/></div>
+            <div>
+              <h1 className="text-lg font-semibold leading-none" style={{ fontFamily:"Fraunces, Georgia, serif" }}>Cadence</h1>
+              <p className="text-xs" style={{ color:T.sub }}>goal &amp; hours tracker</p>
+            </div>
+          </div>
+          <button onClick={()=>setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 font-medium text-white" style={{ background:T.teal }}>
+            <Icon name="plus" size={18}/> <span className="hidden sm:inline">New goal</span>
+          </button>
+        </header>
+        {data.goals.length===0 ? (
+          <div className="text-center py-20 rounded-3xl" style={{ background:T.surface, border:`1px dashed ${T.line}` }}>
+            <div className="inline-flex rounded-2xl p-3 mb-4" style={{ background:T.tealSoft }}><Icon name="target" size={28} color={T.teal}/></div>
+            <h2 className="text-xl font-semibold mb-1" style={{ fontFamily:"Fraunces, Georgia, serif" }}>Set your first goal</h2>
+            <p className="text-sm mb-5 max-w-sm mx-auto" style={{ color:T.sub }}>Name what you're working toward, pick a target date, then log the hours as you go.</p>
+            <button onClick={()=>setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 font-medium text-white" style={{ background:T.teal }}>
+              <Icon name="plus" size={18}/> New goal</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className={`lg:col-span-2 ${selected?"hidden lg:block":""}`}>
+              <div className="text-xs uppercase tracking-wide mb-2 font-medium" style={{ color:T.sub }}>Your goals ({data.goals.length})</div>
+              {data.goals.map(g=>(<GoalCard key={g.id} goal={g} active={g.id===selectedId} onSelect={()=>setSelectedId(g.id)}/>))}
+            </div>
+            <div className={`lg:col-span-3 ${selected?"":"hidden lg:block"}`}>
+              {selected
+                ? <GoalDetail goal={selected} onBack={()=>setSelectedId(null)} onUpdate={updateGoal} onDelete={deleteGoal}/>
+                : <div className="text-center py-24 rounded-3xl" style={{ background:T.surface, border:`1px solid ${T.line}`, color:T.sub }}>Select a goal to track its progress.</div>}
+            </div>
+          </div>
+        )}
+      </div>
+      {showNew && <NewGoalModal onClose={()=>setShowNew(false)} onCreate={createGoal}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+</body>
+</html>
