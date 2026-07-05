@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cadence · Work Goal Tracker</title>
-  <meta name="description" content="Track your professional goals: set targets, log hours, and stay on pace." />
+  <title>Cadence · Goal & Hours Tracker</title>
+  <meta name="description" content="Set goals, log your hours, and track daily progress." />
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
@@ -40,14 +40,11 @@ const T = {
   line:"#DCE3E0", teal:"#0D8A80", tealDark:"#0B6B63", tealSoft:"#D8ECE9",
   amber:"#C77D2E", rose:"#B23A48", green:"#4C8C4A",
 };
-const GOAL_TYPES = ["Project Delivery","Skill Development","Certification","Client Work","Leadership","Sales / Revenue","Process Improvement","Networking","Other"];
+const GOAL_TYPES = ["Learning","Career","Fitness","Project","Creative","Finance","Personal","Other"];
 const TYPE_COLOR = {
-  "Project Delivery":"#0D8A80","Skill Development":"#3D6BB3","Certification":"#7A5AA8",
-  "Client Work":"#C77D2E","Leadership":"#B0863C","Sales / Revenue":"#4C8C4A",
-  "Process Improvement":"#3E8E9C","Networking":"#B23A48","Other":"#5B6B73",
+  Learning:"#0D8A80", Career:"#3D6BB3", Fitness:"#C77D2E", Project:"#7A5AA8",
+  Creative:"#B23A48", Finance:"#4C8C4A", Personal:"#B0863C", Other:"#5B6B73",
 };
-const PRIORITIES = ["High","Medium","Low"];
-const PRIORITY_COLOR = { High:"#B23A48", Medium:"#C77D2E", Low:"#4C8C4A" };
 
 /* ---------- inline svg icons ---------- */
 function Icon({ name, size=16, color="currentColor", style }){
@@ -224,9 +221,7 @@ function BarChartSVG({ data, target }){
 function GoalModal({ initial, onClose, onSave }){
   const editing = initial && initial.id;
   const [title,setTitle]=useState(initial?.title||"");
-  const [type,setType]=useState(initial?.type||"Project Delivery");
-  const [priority,setPriority]=useState(initial?.priority||"Medium");
-  const [project,setProject]=useState(initial?.project||"");
+  const [type,setType]=useState(initial?.type||"Learning");
   const [targetDate,setTargetDate]=useState(initial?.targetDate||iso(new Date(Date.now()+30*dayMs)));
   const [dailyTarget,setDailyTarget]=useState(initial?.dailyTarget??"");
   const [estimatedHours,setEstimatedHours]=useState(initial?.estimatedHours??"");
@@ -238,7 +233,7 @@ function GoalModal({ initial, onClose, onSave }){
     if(!targetDate) return setErr("Pick a target date.");
     onSave({
       id: initial?.id || uid(),
-      title:title.trim(), type, priority, project:project.trim(), targetDate,
+      title:title.trim(), type, targetDate,
       dailyTarget: dailyTarget?Number(dailyTarget):null,
       estimatedHours: estimatedHours?Number(estimatedHours):null,
       reminderTime: reminderTime||null,
@@ -258,17 +253,12 @@ function GoalModal({ initial, onClose, onSave }){
 
         <Field label="What are you working toward?" hint={SR?"tap mic to dictate":null}>
           <div className="flex gap-2">
-            <input style={inputStyle} value={title} autoFocus onChange={e=>setTitle(e.target.value)} placeholder="e.g. Ship the Q3 analytics dashboard"/>
+            <input style={inputStyle} value={title} autoFocus onChange={e=>setTitle(e.target.value)} placeholder="e.g. Learn Spanish B1"/>
             <MicButton onText={(t)=>setTitle(t)} title="Dictate goal name"/>
           </div>
         </Field>
 
         <Field label="Type"><Chips options={GOAL_TYPES} value={type} onChange={setType} colorMap={TYPE_COLOR}/></Field>
-        <Field label="Priority"><Chips options={PRIORITIES} value={priority} onChange={setPriority} colorMap={PRIORITY_COLOR}/></Field>
-
-        <Field label="Project or context" hint="optional">
-          <input style={inputStyle} value={project} onChange={e=>setProject(e.target.value)} placeholder="e.g. Client: Acme · Team roadmap"/>
-        </Field>
 
         <Field label="Target completion date">
           <input type="date" style={inputStyle} value={targetDate} onChange={e=>setTargetDate(e.target.value)}/>
@@ -302,12 +292,8 @@ function GoalCard({ goal, active, onSelect }){
       style={{ background:T.surface, border:`1px solid ${active?T.teal:T.line}`, boxShadow:active?`0 0 0 3px ${T.tealSoft}`:"none" }}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className="font-medium leading-snug" style={{ color:T.ink }}>{goal.title}</span>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <Badge color={TYPE_COLOR[goal.type]}>{goal.type}</Badge>
-          {goal.priority&&<span className="inline-flex items-center gap-1 text-xs" style={{ color:PRIORITY_COLOR[goal.priority] }}><Icon name="flag" size={11}/>{goal.priority}</span>}
-        </div>
+        <Badge color={TYPE_COLOR[goal.type]}>{goal.type}</Badge>
       </div>
-      {goal.project&&<div className="text-xs mb-2" style={{ color:T.sub }}>{goal.project}</div>}
       {s.pct!==null&&(
         <div className="mb-2">
           <div className="h-2 w-full rounded-full overflow-hidden" style={{ background:T.tealSoft }}>
@@ -381,11 +367,9 @@ function GoalDetail({ goal, onBack, onUpdate, onDelete, onEdit }){
         <div>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge color={TYPE_COLOR[goal.type]}>{goal.type}</Badge>
-            {goal.priority&&<Badge color={PRIORITY_COLOR[goal.priority]}>{goal.priority} priority</Badge>}
           </div>
           <h1 className="text-2xl font-semibold leading-tight" style={{ color:T.ink, fontFamily:"Fraunces, Georgia, serif" }}>{goal.title}</h1>
-          {goal.project&&<p className="text-sm mt-1" style={{ color:T.sub }}>{goal.project}</p>}
-          <p className="text-sm mt-0.5" style={{ color:T.sub }}>Target: {prettyDate(goal.targetDate)}{goal.reminderTime?` · reminder ${goal.reminderTime}`:""}</p>
+          <p className="text-sm mt-1" style={{ color:T.sub }}>Target: {prettyDate(goal.targetDate)}{goal.reminderTime?` · reminder ${goal.reminderTime}`:""}</p>
         </div>
         <div className="flex gap-1 shrink-0">
           <button onClick={()=>onEdit(goal)} className="rounded-lg p-2" style={{ color:T.sub }} title="Edit goal"><Icon name="edit" size={18}/></button>
@@ -556,7 +540,7 @@ function App(){
             <div className="rounded-xl p-2" style={{ background:T.teal }}><Icon name="target" size={20} color="#fff"/></div>
             <div>
               <h1 className="text-lg font-semibold leading-none" style={{ fontFamily:"Fraunces, Georgia, serif" }}>Cadence</h1>
-              <p className="text-xs" style={{ color:T.sub }}>work goal tracker</p>
+              <p className="text-xs" style={{ color:T.sub }}>goal &amp; hours tracker</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -574,8 +558,8 @@ function App(){
         {data.goals.length===0?(
           <div className="text-center py-20 rounded-3xl" style={{ background:T.surface, border:`1px dashed ${T.line}` }}>
             <div className="inline-flex rounded-2xl p-3 mb-4" style={{ background:T.tealSoft }}><Icon name="target" size={28} color={T.teal}/></div>
-            <h2 className="text-xl font-semibold mb-1" style={{ fontFamily:"Fraunces, Georgia, serif" }}>Track your first work goal</h2>
-            <p className="text-sm mb-5 max-w-sm mx-auto" style={{ color:T.sub }}>Set a professional target and date, then log hours as you go. Use the mic to add one by voice.</p>
+            <h2 className="text-xl font-semibold mb-1" style={{ fontFamily:"Fraunces, Georgia, serif" }}>Set your first goal</h2>
+            <p className="text-sm mb-5 max-w-sm mx-auto" style={{ color:T.sub }}>Set a target and date, then log hours as you go. Use the mic to add one by voice.</p>
             <button onClick={()=>setModal({})} className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 font-medium text-white" style={{ background:T.teal }}><Icon name="plus" size={18}/> New goal</button>
           </div>
         ):(
