@@ -67,6 +67,7 @@ function Icon({ name, size=16, color="currentColor", style }){
     bell:<F><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></F>,
     edit:<F><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></F>,
     flag:<F><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></F>,
+    sparkles:<F><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></F>,
   };
   return <svg {...c}>{p[name]}</svg>;
 }
@@ -124,6 +125,50 @@ function parseSpokenGoal(text){
   title=title.replace(/^\s*(add|create|new|a|goal|to)\s+/i,"").trim();
   if(title) title=title[0].toUpperCase()+title.slice(1);
   return { title, estimatedHours:est };
+}
+
+/* ---------- goal-prompt interpreter (turns an instruction into a goal draft) ---------- */
+const WORD_NUM={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100};
+const NUMTOK="(\\d+(?:\\.\\d+)?|half|an|a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)";
+function tokNum(t){ t=(t||"").toLowerCase(); if(/^\d/.test(t)) return parseFloat(t); if(t==="half") return .5; if(t==="a"||t==="an") return 1; return WORD_NUM[t]??null; }
+function grabAmt(text,unit){ const m=text.match(new RegExp("\\b"+NUMTOK+"\\b\\s*"+unit,"i")); return m?tokNum(m[1]):null; }
+const TYPE_RULES=[
+  ["Fitness",/(fitness|gym|workout|exercise|running|run|jog|weight|muscle|yoga|cardio|steps|marathon|training|\bfit\b)/i],
+  ["Learning",/(learn|study|read|reading|course|language|spanish|french|german|math|coding|programming|python|degree|exam|certificat|skill|tutorial|book)/i],
+  ["Creative",/(write|writing|novel|paint|painting|draw|drawing|music|guitar|piano|design|art|photograph|blog|video|song)/i],
+  ["Finance",/(save|saving|budget|invest|money|debt|income|expense|fund)/i],
+  ["Career",/(career|job|promotion|interview|resume|\bcv\b|network)/i],
+  ["Project",/(project|build|launch|ship|app|website|startup|product|portfolio)/i],
+];
+function parseGoalPrompt(raw){
+  const text=(raw||"").trim(); const low=text.toLowerCase();
+  let type="Personal"; for(const [t,re] of TYPE_RULES){ if(re.test(low)){ type=t; break; } }
+  const hasDaily=/\b(daily|per day|a day|each day|every day)\b/i.test(low);
+  const hoursAmt=grabAmt(low,"(?:hours?|hrs?)");
+  const minsAmt=grabAmt(low,"(?:minutes?|mins?)");
+  const perDay=hoursAmt!=null?hoursAmt:(minsAmt!=null?+(minsAmt/60).toFixed(2):null);
+  let dailyTarget=null, estimatedHours=null;
+  if(hasDaily) dailyTarget=perDay; else if(hoursAmt!=null) estimatedHours=hoursAmt;
+  const durText=low.replace(new RegExp(NUMTOK+"\\s*(?:hours?|hrs?|minutes?|mins?)","ig")," ").replace(/\b(per day|a day|each day|every day|daily)\b/ig," ");
+  let days=grabAmt(durText,"days?");
+  if(days==null){ const w=grabAmt(durText,"weeks?"); if(w!=null) days=Math.round(w*7); }
+  if(days==null){ const mo=grabAmt(durText,"months?"); if(mo!=null) days=Math.round(mo*30); }
+  if(days==null) days=30;
+  const targetDate=iso(new Date(Date.now()+days*dayMs));
+  if(dailyTarget!=null && estimatedHours==null) estimatedHours=Math.round(dailyTarget*days);
+  let title=null;
+  const gm=text.match(/goals?\s+(?:to|of|about|:)\s+(.+)/i);
+  title=gm?gm[1]:text.replace(/^(please\s+)?(create|add|make|set up|start|build|new)\s+(a|an|the)?\s*/i,"");
+  title=title
+    .replace(/,?\s*(where|with|and)\b.*$/i,"")
+    .replace(/\b(for|in|over|within|by|during|next)\s+\S.*$/i,"")
+    .replace(new RegExp(NUMTOK+"\\s*(?:hours?|hrs?|minutes?|mins?)","ig")," ")
+    .replace(/\b(?:in\s+total|total|overall|altogether|per day|a day|each day|every day|daily)\b/ig," ")
+    .replace(/\bgoals?\b/ig," ")
+    .replace(/\s{2,}/g," ").replace(/^[\s,;:.]+/,"").replace(/[\s,;:.]+$/,"").trim();
+  if(!title || title.toLowerCase()===type.toLowerCase()) title=type+" goal";
+  title=title.charAt(0).toUpperCase()+title.slice(1);
+  return { title, type, targetDate, dailyTarget, estimatedHours };
 }
 
 /* ---------- image scaling ---------- */
@@ -479,6 +524,7 @@ function App(){
   const [data,setData]=useState(()=>loadData());
   const [selectedId,setSelectedId]=useState(null);
   const [modal,setModal]=useState(null); // null | {} (new) | goal (edit) | draft
+  const [prompt,setPrompt]=useState("");
   const [notifPerm,setNotifPerm]=useState(typeof Notification!=="undefined"?Notification.permission:"unsupported");
   const firedRef=useRef({});
 
@@ -532,6 +578,8 @@ function App(){
     }catch(e){}
   };
 
+  const runAgent=()=>{ const p=prompt.trim(); if(!p) return; setModal(parseGoalPrompt(p)); setPrompt(""); };
+
   return (
     <div style={{ background:T.paper, minHeight:"100vh", color:T.ink }}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
@@ -554,6 +602,19 @@ function App(){
             </button>
           </div>
         </header>
+
+        {/* assistant: describe a goal in plain language */}
+        <div className="rounded-2xl p-3 mb-5" style={{ background:T.surface, border:`1px solid ${T.line}` }}>
+          <div className="flex items-center gap-2">
+            <span style={{ color:T.teal }}><Icon name="sparkles" size={18}/></span>
+            <input value={prompt} onChange={e=>setPrompt(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter") runAgent(); }}
+              placeholder="Describe a goal, e.g. Fitness goal for 50 days, 2 hours daily"
+              className="flex-1" style={{ ...inputStyle, border:"none", padding:"6px 4px", flex:1 }}/>
+            <MicButton onText={(t)=>setPrompt(t)} size={16} title="Dictate instruction"/>
+            <button onClick={runAgent} className="rounded-xl px-4 py-2 font-medium text-white shrink-0" style={{ background:T.teal }}>Generate</button>
+          </div>
+        </div>
 
         {data.goals.length===0?(
           <div className="text-center py-20 rounded-3xl" style={{ background:T.surface, border:`1px dashed ${T.line}` }}>
