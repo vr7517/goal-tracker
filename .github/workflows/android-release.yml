@@ -41,6 +41,10 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/release.keystore
+
       - name: Build release APK
         working-directory: android
         env:
@@ -48,13 +52,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if [ -f "$ANDROID_KEYSTORE_PATH" ]; then
-            echo "Using existing keystore"
-          else
-            echo "Keystore not provided; building unsigned APK for now"
-          fi
-          ./gradlew assembleRelease
+        run: ./gradlew assembleRelease
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
