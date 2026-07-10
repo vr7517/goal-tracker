@@ -5,10 +5,10 @@ export function LocationCard() {
   return (
     <section className="card">
       <h2>Check-in location</h2>
-      <p className="muted">Tag where you did the work â handy for gym or study-spot streaks.</p>
+      <p className="muted">Tag where you did the work - handy for gym or study-spot streaks.</p>
       <div className="row" style={{ marginTop: 10 }}>
         <button className="btn" disabled={busy} onClick={() => void locate()}>
-          {busy ? 'Locatingâ¦' : 'Get location'}
+          {busy ? 'Locating...' : 'Get location'}
         </button>
         <button
           className="btn secondary"
@@ -22,7 +22,7 @@ export function LocationCard() {
         <ul className="list">
           <li>Latitude: {coords.lat.toFixed(5)}</li>
           <li>Longitude: {coords.lng.toFixed(5)}</li>
-          <li>Accuracy: Â±{Math.round(coords.accuracy)} m</li>
+          <li>Accuracy: +/-{Math.round(coords.accuracy)} m</li>
           <li>Updated: {new Date(coords.timestamp).toLocaleTimeString()}</li>
         </ul>
       )}

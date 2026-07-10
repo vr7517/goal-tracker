@@ -59,7 +59,7 @@ export default function App() {
       <ReminderCard />
 
       <p className="muted" style={{ textAlign: 'center', marginTop: 24 }}>
-        Cadence Â· offline-first Â· your data stays on device
+        Cadence - offline-first - your data stays on device
       </p>
     </div>
   );

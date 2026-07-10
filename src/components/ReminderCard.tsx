@@ -15,7 +15,7 @@ export function ReminderCard() {
       <h2>Daily reminder</h2>
       <p className="muted">
         {granted === null
-          ? 'Checking notification permissionâ¦'
+          ? 'Checking notification permission...'
           : granted
             ? 'Notifications are enabled.'
             : 'Enable notifications to get a daily nudge.'}

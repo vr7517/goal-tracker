@@ -5,10 +5,10 @@ export function CameraCard() {
   return (
     <section className="card">
       <h2>Progress photo</h2>
-      <p className="muted">Snap a milestone shot â uses the native camera on device, a file picker on web.</p>
+      <p className="muted">Snap a milestone shot - uses the native camera on device, a file picker on web.</p>
       <div className="row" style={{ marginTop: 10 }}>
         <button className="btn" disabled={busy} onClick={() => void capture(CameraSource.Camera)}>
-          {busy ? 'Openingâ¦' : 'Take photo'}
+          {busy ? 'Opening...' : 'Take photo'}
         </button>
         <button className="btn secondary" disabled={busy} onClick={() => void capture(CameraSource.Photos)}>
           Choose from gallery

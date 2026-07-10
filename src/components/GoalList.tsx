@@ -12,10 +12,10 @@ interface Props {
 
 export function GoalList({ goals, loading, onLog, onRemove, progress, totalLogged }: Props) {
   if (loading) {
-    return <section className="card"><p className="muted">Loading your goalsâ¦</p></section>;
+    return <section className="card"><p className="muted">Loading your goals...</p></section>;
   }
   if (!goals.length) {
-    return <section className="card"><p className="muted">No goals yet â add your first one above.</p></section>;
+    return <section className="card"><p className="muted">No goals yet - add your first one above.</p></section>;
   }
   return (
     <section className="card">
@@ -47,7 +47,7 @@ function GoalRow({ goal, onLog, onRemove, progress, totalLogged }: RowProps) {
       </div>
       <div className="pbar"><i style={{ width: `${pct}%` }} /></div>
       <p className="muted" style={{ margin: '6px 0 8px' }}>
-        {totalLogged(goal)}h logged{goal.estimatedHours ? ` of ${goal.estimatedHours}h Â· ${pct}%` : ''}
+        {totalLogged(goal)}h logged{goal.estimatedHours ? ` of ${goal.estimatedHours}h - ${pct}%` : ''}
       </p>
       <div className="row">
         <input
